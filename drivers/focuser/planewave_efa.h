@@ -32,13 +32,13 @@ class EFA : public INDI::Focuser
     public:
         EFA();
 
-        virtual bool Handshake();
-        const char *getDefaultName();
-        virtual bool initProperties();
-        virtual bool updateProperties();
+        virtual bool Handshake() override;
+        const char *getDefaultName() override;
+        virtual bool initProperties() override;
+        virtual bool updateProperties() override;
 
-        virtual bool ISNewNumber(const char *dev, const char *name, double values[], char *names[], int n);
-        virtual bool ISNewSwitch(const char *dev, const char *name, ISState *states, char *names[], int n);
+        virtual bool ISNewNumber(const char *dev, const char *name, double values[], char *names[], int n) override;
+        virtual bool ISNewSwitch(const char *dev, const char *name, ISState *states, char *names[], int n) override;
 
         enum
         {
@@ -72,40 +72,47 @@ class EFA : public INDI::Focuser
         };
 
     protected:
-        virtual IPState MoveAbsFocuser(uint32_t targetTicks);
-        virtual IPState MoveRelFocuser(FocusDirection dir, unsigned int ticks);
-        virtual bool SyncFocuser(uint32_t ticks);
-        virtual bool ReverseFocuser(bool enabled);
-        virtual bool SetFocuserMaxPosition(uint32_t ticks);
-        virtual bool AbortFocuser();
-        virtual void TimerHit();
+        virtual IPState MoveAbsFocuser(uint32_t targetTicks) override;
+        virtual IPState MoveRelFocuser(FocusDirection dir, unsigned int ticks) override;
+        virtual bool SyncFocuser(uint32_t ticks) override;
+        virtual bool ReverseFocuser(bool enabled) override;
+        virtual bool SetFocuserMaxPosition(uint32_t ticks) override;
+        virtual bool AbortFocuser() override;
+        virtual void TimerHit() override;
+        virtual bool Disconnect() override;
 
-        virtual bool saveConfigItems(FILE *fp);
+        virtual bool saveConfigItems(FILE *fp) override;
 
     private:
         ///////////////////////////////////////////////////////////////////////////////////
         /// Query functions
         ///////////////////////////////////////////////////////////////////////////////////
         bool isGOTOComplete();
+        bool readPosition();
+        bool readTemperature();
+        bool readFanState();
+        bool readCalibrationState();
+        bool readMaxSlewLimit();
 
         ///////////////////////////////////////////////////////////////////////////////////
         /// Set functions
         ///////////////////////////////////////////////////////////////////////////////////
-
+        bool setFanEnabled(bool enabled);
+        bool setCalibrationEnabled(bool enabled);
 
         ///////////////////////////////////////////////////////////////////////////////
         /// Communication Functions
         ///////////////////////////////////////////////////////////////////////////////
-        bool sendCommandOk(const char * cmd, int cmd_len);
-        bool sendCommand(const char * cmd, char * res, int cmd_len, int res_len);
-        void hexDump(char * buf, const char * data, int size);
+        bool sendCommand(const char * cmd, char * res, uint32_t cmd_len, uint32_t res_len);
+        void hexDump(char * buf, const char * data, uint32_t size);
         std::vector<std::string> split(const std::string &input, const std::string &regex);
 
         ///////////////////////////////////////////////////////////////////////////////////
         /// Misc
         ///////////////////////////////////////////////////////////////////////////////////
         void getStartupValues();
-        uint8_t calculateCheckSum(const char *cmd);
+        double calculateTemperature(uint8_t byte2, uint8_t byte3);
+        uint8_t calculateCheckSum(const char *cmd, uint32_t len);
         template <typename T> std::string to_string(const T a_value, const int n = 2);
 
         ///////////////////////////////////////////////////////////////////////////////////
@@ -120,65 +127,79 @@ class EFA : public INDI::Focuser
             INFO_VERSION
         };
 
-        // Focuser Operations
-        ISwitchVectorProperty OperationSP;
-        ISwitch OperationS[3];
+
+        // FAN State
+        ISwitchVectorProperty FanStateSP;
+        ISwitch FanStateS[2];
         enum
         {
-            OPERATION_REBOOT,
-            OPERATION_RESET,
-            OPERATION_ZEROING,
+            FAN_ON,
+            FAN_OFF
         };
 
-        // Temperature Compensation
-        ISwitchVectorProperty TemperatureCompensationSP;
-        ISwitch TemperatureCompensationS[2];
+        // Fan Control Mode
+        ISwitchVectorProperty FanControlSP;
+        ISwitch FanControlS[3];
         enum
         {
-            TC_ENABLED,
-            TC_DISABLED
+            FAN_MANUAL,
+            FAN_AUTOMATIC_ABSOLUTE,
+            FAN_AUTOMATIC_RELATIVE,
         };
 
-        // TC State
-        ISwitchVectorProperty TemperatureStateSP;
-        ISwitch TemperatureStateS[2];
+        // Fan Control Parameters
+        INumberVectorProperty FanControlNP;
+        INumber FanControlN[3];
         enum
         {
-            TC_ACTIVE,
-            TC_PAUSED
+            FAN_MAX_ABSOLUTE,
+            FAN_MAX_RELATIVE,
+            FAN_DEADZONE,
         };
 
-        // Temperature Compensation Settings
-        INumberVectorProperty TemperatureSettingsNP;
-        INumber TemperatureSettingsN[3];
+        // Fan Off on Disconnect
+        ISwitchVectorProperty FanDisconnectSP;
+        ISwitch FanDisconnectS[1];
         enum
         {
-            TC_FACTOR,
-            TC_PERIOD,
-            TC_DELTA
+            FAN_OFF_ON_DISCONNECT
         };
 
-        // Temperature Sensors
-        INumberVectorProperty TemperatureSensorNP;
-        INumber TemperatureSensorN[3];
+        // Calibration State
+        ISwitchVectorProperty CalibrationStateSP;
+        ISwitch CalibrationStateS[2];
         enum
         {
-            TEMP_0,
-            TEMP_1,
-            TEMP_AVG
+            CALIBRATION_ON,
+            CALIBRATION_OFF
+        };
+
+        // Read Only Temperature Reporting
+        INumberVectorProperty TemperatureNP;
+        INumber TemperatureN[2];
+        enum
+        {
+            TEMPERATURE_PRIMARY,
+            TEMPERATURE_AMBIENT
         };
 
         /////////////////////////////////////////////////////////////////////////////
         /// Private variables
         /////////////////////////////////////////////////////////////////////////////
+        double m_LastTemperature[2];
+        double m_LastPosition {0};
 
         /////////////////////////////////////////////////////////////////////////////
         /// Static Helper Values
         /////////////////////////////////////////////////////////////////////////////
         // Start of Message
         static const char DRIVER_SOM { 0x3B };
+        // Temperature Reporting threshold
+        static constexpr double TEMPERATURE_THRESHOLD { 0.05 };
 
         static constexpr const uint8_t DRIVER_LEN {9};
         // Wait up to a maximum of 3 seconds for serial input
         static constexpr const uint8_t DRIVER_TIMEOUT {3};
+        // Fan Control
+        static constexpr const char *FAN_TAB = "Fan";
 };

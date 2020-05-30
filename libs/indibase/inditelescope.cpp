@@ -117,7 +117,8 @@ bool Telescope::initProperties()
     // Pier Side Simulation
     IUFillSwitch(&SimulatePierSideS[0], "SIMULATE_YES", "Yes", ISS_OFF);
     IUFillSwitch(&SimulatePierSideS[1], "SIMULATE_NO", "No", ISS_ON);
-    IUFillSwitchVector(&SimulatePierSideSP, SimulatePierSideS, 2, getDeviceName(), "SIMULATE_PIER_SIDE", "Simulate Pier Side", MAIN_CONTROL_TAB,
+    IUFillSwitchVector(&SimulatePierSideSP, SimulatePierSideS, 2, getDeviceName(), "SIMULATE_PIER_SIDE", "Simulate Pier Side",
+                       MAIN_CONTROL_TAB,
                        IP_RW, ISR_1OFMANY, 60, IPS_IDLE);
 
     // PEC State
@@ -133,11 +134,13 @@ bool Telescope::initProperties()
     // Track State
     IUFillSwitch(&TrackStateS[TRACK_ON], "TRACK_ON", "On", ISS_OFF);
     IUFillSwitch(&TrackStateS[TRACK_OFF], "TRACK_OFF", "Off", ISS_ON);
-    IUFillSwitchVector(&TrackStateSP, TrackStateS, 2, getDeviceName(), "TELESCOPE_TRACK_STATE", "Tracking", MAIN_CONTROL_TAB, IP_RW, ISR_1OFMANY, 0,
+    IUFillSwitchVector(&TrackStateSP, TrackStateS, 2, getDeviceName(), "TELESCOPE_TRACK_STATE", "Tracking", MAIN_CONTROL_TAB,
+                       IP_RW, ISR_1OFMANY, 0,
                        IPS_IDLE);
 
     // Track Rate
-    IUFillNumber(&TrackRateN[AXIS_RA], "TRACK_RATE_RA", "RA (arcsecs/s)", "%.6f", -16384.0, 16384.0, 0.000001, TRACKRATE_SIDEREAL);
+    IUFillNumber(&TrackRateN[AXIS_RA], "TRACK_RATE_RA", "RA (arcsecs/s)", "%.6f", -16384.0, 16384.0, 0.000001,
+                 TRACKRATE_SIDEREAL);
     IUFillNumber(&TrackRateN[AXIS_DE], "TRACK_RATE_DE", "DE (arcsecs/s)", "%.6f", -16384.0, 16384.0, 0.000001, 0.0);
     IUFillNumberVector(&TrackRateNP, TrackRateN, 2, getDeviceName(), "TELESCOPE_TRACK_RATE", "Track Rates", MAIN_CONTROL_TAB,
                        IP_RW, 60, IPS_IDLE);
@@ -634,7 +637,8 @@ bool Telescope::saveConfigItems(FILE *fp)
     IUSaveConfigText(fp, &ActiveDeviceTP);
     IUSaveConfigSwitch(fp, &DomeClosedLockTP);
 
-    if (HasLocation())
+    // Ensure that we only save valid locations
+    if (HasLocation() && (LocationN[LOCATION_LONGITUDE].value != 0 || LocationN[LOCATION_LATITUDE].value != 0))
         IUSaveConfigNumber(fp, &LocationNP);
 
     if (!HasDefaultScopeConfig())
@@ -1684,23 +1688,6 @@ bool Telescope::processTimeInfo(const char *utc, const char *offset)
         IUSaveText(&TimeT[1], offset);
         TimeTP.s = IPS_OK;
         IDSetText(&TimeTP, nullptr);
-
-        // 2018-04-20 JM: Update system time on ARM architecture.
-#ifdef __arm__
-#ifdef __linux__
-        struct tm utm;
-        if (strptime(utc, "%Y-%m-%dT%H:%M:%S", &utm))
-        {
-            time_t raw_time = mktime(&utm);
-            time_t now_time;
-            time(&now_time);
-            // Only sync if difference > 30 seconds
-            if (labs(now_time - raw_time) > 30)
-                stime(&raw_time);
-        }
-#endif
-#endif
-
         return true;
     }
     else

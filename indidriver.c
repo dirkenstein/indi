@@ -1,22 +1,26 @@
 #if 0
-    INDI Driver Functions
+INDI Driver Functions
 
-    Copyright (C) 2003-2015 Jasem Mutlaq
-    Copyright (C) 2003-2006 Elwood C. Downey
+Copyright (C) 2003 - 2020 Jasem Mutlaq
+Copyright (C) 2003 - 2006 Elwood C. Downey
 
-    This library is free software; you can redistribute it and/or
-    modify it under the terms of the GNU Lesser General Public
-    License as published by the Free Software Foundation; either
-    version 2.1 of the License, or (at your option) any later version.
+This library is free software;
+you can redistribute it and / or
+modify it under the terms of the GNU Lesser General Public
+License as published by the Free Software Foundation;
+either
+version 2.1 of the License, or (at your option) any later version.
 
-    This library is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-    Lesser General Public License for more details.
+This library is distributed in the hope that it will be useful,
+     but WITHOUT ANY WARRANTY;
+without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+Lesser General Public License for more details.
 
-    You should have received a copy of the GNU Lesser General Public
-    License along with this library; if not, write to the Free Software
-    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+You should have received a copy of the GNU Lesser General Public
+License along with this library;
+if not, write to the Free Software
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110 - 1301  USA
 
 #endif
 
@@ -37,6 +41,7 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <assert.h>
 
 pthread_mutex_t stdout_mutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -45,12 +50,12 @@ pthread_mutex_t stdout_mutex = PTHREAD_MUTEX_INITIALIZER;
 /*! INDI property type */
 enum
 {
-    INDI_NUMBER,
-    INDI_SWITCH,
-    INDI_TEXT,
-    INDI_LIGHT,
-    INDI_BLOB,
-    INDI_UNKNOWN
+INDI_NUMBER,
+INDI_SWITCH,
+INDI_TEXT,
+INDI_LIGHT,
+INDI_BLOB,
+INDI_UNKNOWN
 };
 
 /* Return index of property property if already cached, -1 otherwise */
@@ -230,6 +235,8 @@ int IUUpdateSwitch(ISwitchVectorProperty *svp, ISState *states, char *names[], i
     ISwitch *sp;
     char sn[MAXINDINAME];
 
+    assert(svp != NULL && "IUUpdateSwitch SVP is NULL");
+
     /* store On switch name */
     if (svp->r == ISR_1OFMANY)
     {
@@ -283,8 +290,9 @@ int IUUpdateSwitch(ISwitchVectorProperty *svp, ISState *states, char *names[], i
 int IUUpdateNumber(INumberVectorProperty *nvp, double values[], char *names[], int n)
 {
     int i = 0;
-
     INumber *np;
+
+    assert(nvp != NULL && "IUUpdateNumber NVP is NULL");
 
     for (i = 0; i < n; i++)
     {
@@ -319,8 +327,9 @@ int IUUpdateNumber(INumberVectorProperty *nvp, double values[], char *names[], i
 int IUUpdateText(ITextVectorProperty *tvp, char *texts[], char *names[], int n)
 {
     int i = 0;
-
     IText *tp;
+
+    assert(tvp != NULL && "IUUpdateText TVP is NULL");
 
     for (i = 0; i < n; i++)
     {
@@ -348,8 +357,9 @@ int IUUpdateBLOB(IBLOBVectorProperty *bvp, int sizes[], int blobsizes[], char *b
                  int n)
 {
     int i = 0;
-
     IBLOB *bp;
+
+    assert(bvp != NULL && "IUUpdateBLOB BVP is NULL");
 
     for (i = 0; i < n; i++)
     {
@@ -970,9 +980,9 @@ int dispatch(XMLEle *root, char msg[])
          * all remaining valid messages
          */
     if (!strcmp(rtag, "setNumberVector") || !strcmp(rtag, "setTextVector") || !strcmp(rtag, "setLightVector") ||
-        !strcmp(rtag, "setSwitchVector") || !strcmp(rtag, "setBLOBVector") || !strcmp(rtag, "defNumberVector") ||
-        !strcmp(rtag, "defTextVector") || !strcmp(rtag, "defLightVector") || !strcmp(rtag, "defSwitchVector") ||
-        !strcmp(rtag, "defBLOBVector") || !strcmp(rtag, "message") || !strcmp(rtag, "delProperty"))
+            !strcmp(rtag, "setSwitchVector") || !strcmp(rtag, "setBLOBVector") || !strcmp(rtag, "defNumberVector") ||
+            !strcmp(rtag, "defTextVector") || !strcmp(rtag, "defLightVector") || !strcmp(rtag, "defSwitchVector") ||
+            !strcmp(rtag, "defBLOBVector") || !strcmp(rtag, "message") || !strcmp(rtag, "delProperty"))
     {
         ISSnoopDevice(root);
         return (0);
@@ -1282,7 +1292,7 @@ int IUReadConfig(const char *filename, const char *dev, const char *property, in
     return (0);
 }
 
-void IUSaveDefaultConfig(const char *source_config, const char *dest_config, const char *dev)
+int IUSaveDefaultConfig(const char *source_config, const char *dest_config, const char *dev)
 {
     char configFileName[MAXRBUF], configDefaultFileName[MAXRBUF];
 
@@ -1315,11 +1325,82 @@ void IUSaveDefaultConfig(const char *source_config, const char *dest_config, con
                 int ch = 0;
                 while ((ch = getc(fpin)) != EOF)
                     putc(ch, fpout);
-        fclose(fpout);
+
+                fflush(fpout);
+                fclose(fpout);
             }
-        fclose(fpin);
+            fclose(fpin);
+
+            return 0;
         }
     }
+    // If default config file exists already, then no need to modify it
+    else
+        return 0;
+
+
+    return -1;
+}
+
+int IUGetConfigOnSwitch(const ISwitchVectorProperty *property, int *index)
+{
+    char *rname, *rdev;
+    XMLEle *root = NULL, *fproot = NULL;
+    char errmsg[MAXRBUF];
+    LilXML *lp = newLilXML();
+    int propertyFound = 0;
+    *index = -1;
+
+    FILE *fp = IUGetConfigFP(NULL, property->device, "r", errmsg);
+
+    if (fp == NULL)
+        return -1;
+
+    fproot = readXMLFile(fp, lp, errmsg);
+
+    if (fproot == NULL)
+    {
+        fclose(fp);
+        return -1;
+    }
+
+    for (root = nextXMLEle(fproot, 1); root != NULL; root = nextXMLEle(fproot, 0))
+    {
+        /* pull out device and name */
+        if (crackDN(root, &rdev, &rname, errmsg) < 0)
+        {
+            fclose(fp);
+            delXMLEle(fproot);
+            return -1;
+        }
+
+        // It doesn't belong to our device??
+        if (strcmp(property->device, rdev))
+            continue;
+
+        if (!strcmp(property->name, rname))
+        {
+            propertyFound = 1;
+            XMLEle *oneSwitch = NULL;
+            int oneSwitchIndex = 0;
+            ISState oneSwitchState;
+            for (oneSwitch = nextXMLEle(root, 1); oneSwitch != NULL; oneSwitch = nextXMLEle(root, 0), oneSwitchIndex++)
+            {
+                if (crackISState(pcdataXMLEle(oneSwitch), &oneSwitchState) == 0 && oneSwitchState == ISS_ON)
+                {
+                    *index = oneSwitchIndex;
+                    break;
+                }
+            }
+            break;
+        }
+    }
+
+    fclose(fp);
+    delXMLEle(fproot);
+    delLilXML(lp);
+
+    return (propertyFound ? 0 : -1);
 }
 
 int IUGetConfigSwitch(const char *dev, const char *property, const char *member, ISState *value)
@@ -1328,7 +1409,7 @@ int IUGetConfigSwitch(const char *dev, const char *property, const char *member,
     XMLEle *root = NULL, *fproot = NULL;
     char errmsg[MAXRBUF];
     LilXML *lp = newLilXML();
-    int valueFound=0;
+    int valueFound = 0;
 
     FILE *fp = IUGetConfigFP(NULL, dev, "r", errmsg);
 
@@ -1386,7 +1467,7 @@ int IUGetConfigNumber(const char *dev, const char *property, const char *member,
     XMLEle *root = NULL, *fproot = NULL;
     char errmsg[MAXRBUF];
     LilXML *lp = newLilXML();
-    int valueFound=0;
+    int valueFound = 0;
 
     FILE *fp = IUGetConfigFP(NULL, dev, "r", errmsg);
 
@@ -1444,7 +1525,7 @@ int IUGetConfigText(const char *dev, const char *property, const char *member, c
     XMLEle *root = NULL, *fproot = NULL;
     char errmsg[MAXRBUF];
     LilXML *lp = newLilXML();
-    int valueFound=0;
+    int valueFound = 0;
 
     FILE *fp = IUGetConfigFP(NULL, dev, "r", errmsg);
 
@@ -1582,7 +1663,9 @@ FILE *IUGetConfigFP(const char *filename, const char *dev, const char *mode, cha
     /* If file is owned by root and current user is NOT root then abort */
     if ( (st.st_uid == 0 && getuid() != 0) || (st.st_gid == 0 && getgid() != 0) )
     {
-        strncpy(errmsg, "Config file is owned by root! This will lead to serious errors. To fix this, run: sudo chown -R $USER:$USER ~/.indi", MAXRBUF);
+        strncpy(errmsg,
+                "Config file is owned by root! This will lead to serious errors. To fix this, run: sudo chown -R $USER:$USER ~/.indi",
+                MAXRBUF);
         return NULL;
     }
 
